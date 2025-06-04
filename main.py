@@ -138,6 +138,10 @@ def process_excel_file(excel_file):
         # Mapear possíveis nomes de colunas
         col_mapping = {
             'data': ['data', 'date', 'dia'],
+            'entrada1': ['horário de entrada 1', 'entrada 1', 'entrada1', 'entry1'],
+            'saida1': ['horário de saída 1', 'saida 1', 'saida1', 'exit1'],
+            'entrada2': ['horário de entrada 2', 'entrada 2', 'entrada2', 'entry2'],
+            'saida2': ['horário de saída 2', 'saida 2', 'saida2', 'exit2'],
             'entrada': ['entrada', 'entry', 'inicio', 'start'],
             'saida': ['saida', 'exit', 'fim', 'end'],
             'inicio_intervalo': ['inicio_intervalo', 'inicio intervalo', 'break_start', 'intervalo_inicio'],
@@ -152,36 +156,66 @@ def process_excel_file(excel_file):
                     found_cols[key] = col
                     break
         
-        # Se não encontrar as colunas esperadas, assumir ordem padrão
-        if len(found_cols) < 3:  # Pelo menos Data, Entrada e Saída
-            cols = df.columns.tolist()
-            if len(cols) >= 3:
-                found_cols = {
-                    'data': cols[0],
-                    'entrada': cols[1],
-                    'saida': cols[-1]  # Última coluna como saída
-                }
-                if len(cols) >= 5:
-                    found_cols['inicio_intervalo'] = cols[2]
-                    found_cols['fim_intervalo'] = cols[3]
-        
-        # Processar os dados
-        for _, row in df.iterrows():
-            try:
-                data_entry = {
-                    'Data': str(row[found_cols['data']]) if 'data' in found_cols else '',
-                    'Entrada': str(row[found_cols['entrada']]) if 'entrada' in found_cols else '',
-                    'Saída': str(row[found_cols['saida']]) if 'saida' in found_cols else '',
-                    'Início Intervalo': str(row[found_cols.get('inicio_intervalo', '')]) if 'inicio_intervalo' in found_cols else '',
-                    'Fim Intervalo': str(row[found_cols.get('fim_intervalo', '')]) if 'fim_intervalo' in found_cols else ''
-                }
-                
-                # Validar se a linha tem dados válidos
-                if data_entry['Data'] and data_entry['Entrada'] and data_entry['Saída']:
-                    data_processed.append(data_entry)
+        # Verificar se é o formato com 4 colunas (entrada1, saida1, entrada2, saida2)
+        if 'entrada1' in found_cols and 'saida2' in found_cols:
+            # Formato com horários separados
+            for i, row in df.iterrows():
+                try:
+                    entrada1 = str(row[found_cols['entrada1']]).strip() if 'entrada1' in found_cols else ''
+                    saida1 = str(row[found_cols.get('saida1', '')]).strip() if 'saida1' in found_cols else ''
+                    entrada2 = str(row[found_cols.get('entrada2', '')]).strip() if 'entrada2' in found_cols else ''
+                    saida2 = str(row[found_cols['saida2']]).strip() if 'saida2' in found_cols else ''
                     
-            except Exception as e:
-                continue
+                    # Verificar se tem dados válidos
+                    if entrada1 and saida2 and entrada1 != 'nan' and saida2 != 'nan':
+                        data_entry = {
+                            'Data': f"{i+1:02d}/12/2024",  # Data fictícia
+                            'Entrada': entrada1,
+                            'Saída': saida2,
+                            'Início Intervalo': saida1 if saida1 and saida1 != 'nan' else '',
+                            'Fim Intervalo': entrada2 if entrada2 and entrada2 != 'nan' else ''
+                        }
+                        data_processed.append(data_entry)
+                        
+                except Exception as e:
+                    continue
+        else:
+            # Formato tradicional
+            # Se não encontrar as colunas esperadas, assumir ordem padrão
+            if len(found_cols) < 3:  # Pelo menos Data, Entrada e Saída
+                cols = df.columns.tolist()
+                if len(cols) >= 3:
+                    found_cols = {
+                        'data': cols[0] if len(cols) > 4 else None,
+                        'entrada': cols[0] if len(cols) <= 4 else cols[1],
+                        'saida': cols[-1]  # Última coluna como saída
+                    }
+                    if len(cols) >= 5:
+                        found_cols['inicio_intervalo'] = cols[2]
+                        found_cols['fim_intervalo'] = cols[3]
+            
+            # Processar os dados
+            for i, row in df.iterrows():
+                try:
+                    if 'data' in found_cols and found_cols['data']:
+                        data_val = str(row[found_cols['data']])
+                    else:
+                        data_val = f"{i+1:02d}/12/2024"  # Data fictícia se não houver coluna de data
+                    
+                    data_entry = {
+                        'Data': data_val,
+                        'Entrada': str(row[found_cols['entrada']]) if 'entrada' in found_cols else '',
+                        'Saída': str(row[found_cols['saida']]) if 'saida' in found_cols else '',
+                        'Início Intervalo': str(row[found_cols.get('inicio_intervalo', '')]) if 'inicio_intervalo' in found_cols else '',
+                        'Fim Intervalo': str(row[found_cols.get('fim_intervalo', '')]) if 'fim_intervalo' in found_cols else ''
+                    }
+                    
+                    # Validar se a linha tem dados válidos
+                    if data_entry['Entrada'] and data_entry['Saída'] and data_entry['Entrada'] != 'nan' and data_entry['Saída'] != 'nan':
+                        data_processed.append(data_entry)
+                        
+                except Exception as e:
+                    continue
                 
         return data_processed
         
@@ -271,8 +305,16 @@ def main():
             # Processar dados automaticamente
             st.success("✅ Processamento concluído! Preparando download do Excel...")
             full_df = pd.concat(all_data)
-            full_df['Data'] = pd.to_datetime(full_df['Data'], format='%d/%m/%Y')
-            full_df.sort_values('Data', inplace=True)
+            
+            # Converter data com tratamento de erro
+            try:
+                full_df['Data'] = pd.to_datetime(full_df['Data'], format='%d/%m/%Y', errors='coerce')
+                # Remove linhas com datas inválidas
+                full_df = full_df.dropna(subset=['Data'])
+                full_df.sort_values('Data', inplace=True)
+            except Exception as e:
+                st.warning(f"Erro na conversão de datas: {str(e)}. Usando dados sem ordenação por data.")
+                # Se não conseguir converter, manter como está
 
             # Calcular estatísticas
             media = full_df['Horas/Dia'].mean()
