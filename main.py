@@ -11,7 +11,7 @@ from io import BytesIO
 OCR_SPACE_API_KEY = ''  # Se tiver, coloque aqui. Se não, deixe vazio.
 
 # Layout e título cyberpunk
-st.set_page_config(layout="wide", page_title="💀 Cyberpunk PSC Horas", page_icon="🕶️")
+st.set_page_config(layout="wide", page_title=" Cálculo Horas", page_icon="🕶️")
 
 # Estilo cyberpunk (usando HTML e CSS simples)
 st.markdown("""
@@ -109,7 +109,7 @@ def calculate_hours(row):
         return 0
 
 def main():
-    st.title("💀 PSC Cyberpunk - Controle de Horas")
+    st.title("Controle de Horas")
     st.subheader("Análise OCR e Visualização de Jornadas")
 
     uploaded_files = st.file_uploader("📸 Envie imagens do formulário PSC", type=['jpg', 'jpeg', 'png'], accept_multiple_files=True)
@@ -143,7 +143,7 @@ def main():
             full_df['Data'] = pd.to_datetime(full_df['Data'], format='%d/%m/%Y')
             full_df.sort_values('Data', inplace=True)
 
-            st.subheader("📊 Visualizações Cyberpunk")
+            st.subheader("📊 Visualizações")
             col1, col2 = st.columns(2)
 
             with col1:
