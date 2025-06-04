@@ -9,6 +9,10 @@ import seaborn as sns
 from io import BytesIO
 import xlsxwriter
 import openpyxl
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from scipy import stats
 
 OCR_SPACE_API_KEY = ''  # Se tiver, coloque aqui. Se não, deixe vazio.
 
@@ -319,6 +323,8 @@ def main():
             # Calcular estatísticas DIÁRIAS
             media_diaria = full_df['Horas/Dia'].mean()
             desvio_diario = full_df['Horas/Dia'].std()
+            # Calcular moda (valor mais frequente)
+            moda_diaria = stats.mode(full_df['Horas/Dia'], keepdims=True)[0][0] if len(full_df['Horas/Dia']) > 0 else 0
             
             # Calcular estatísticas SEMANAIS
             full_df['Semana'] = full_df['Data'].dt.to_period('W')
@@ -350,6 +356,7 @@ def main():
                     stats_df = pd.DataFrame([
                         ['Total Geral', f"{total_geral:.2f}"],
                         ['Média Diária', f"{media_diaria:.2f}"],
+                        ['Moda Diária', f"{moda_diaria:.2f}"],
                         ['Desvio Padrão Diário', f"{desvio_diario:.2f}"],
                         ['Média Semanal', f"{media_semanal:.2f}"],
                         ['Desvio Padrão Semanal', f"{desvio_semanal:.2f}"]
@@ -385,59 +392,149 @@ def main():
                     type="primary"
                 )
 
-            st.subheader("📊 Visualizações")
-            col1, col2, col3 = st.columns(3)
+            st.subheader("📊 Visualizações Interativas")
+            
+            # Gráfico 1: Horas por Dia (Gráfico de Barras Interativo)
+            st.write("📅 **Horas Trabalhadas por Dia**")
+            st.write("*💡 Passe o mouse sobre as barras para ver detalhes. Este gráfico mostra sua jornada diária, permitindo identificar dias com mais ou menos trabalho.*")
+            try:
+                dates_str = full_df['Data'].dt.strftime('%d/%m/%Y')
+                fig1 = go.Figure()
+                
+                # Barras das horas trabalhadas
+                fig1.add_trace(go.Bar(
+                    x=dates_str, 
+                    y=full_df['Horas/Dia'],
+                    name='Horas Trabalhadas',
+                    marker_color='#00ffea',
+                    hovertemplate='<b>%{x}</b><br>Horas: %{y:.2f}h<extra></extra>'
+                ))
+                
+                # Linha da média
+                fig1.add_trace(go.Scatter(
+                    x=dates_str,
+                    y=[media_diaria] * len(dates_str),
+                    mode='lines',
+                    name=f'Média Diária ({media_diaria:.2f}h)',
+                    line=dict(color='magenta', dash='dash', width=2),
+                    hovertemplate='Média: %{y:.2f}h<extra></extra>'
+                ))
+                
+                # Linha da moda
+                fig1.add_trace(go.Scatter(
+                    x=dates_str,
+                    y=[moda_diaria] * len(dates_str),
+                    mode='lines',
+                    name=f'Moda ({moda_diaria:.2f}h)',
+                    line=dict(color='yellow', dash='dot', width=2),
+                    hovertemplate='Moda: %{y:.2f}h<extra></extra>'
+                ))
+                
+                fig1.update_layout(
+                    title="Horas Trabalhadas por Dia",
+                    xaxis_title="Data",
+                    yaxis_title="Horas",
+                    template="plotly_dark",
+                    height=500,
+                    showlegend=True
+                )
+                st.plotly_chart(fig1, use_container_width=True)
+            except Exception as e:
+                st.error(f"Erro no gráfico: {str(e)}")
 
-            with col1:
-                st.write("📅 **Horas Trabalhadas por Dia**")
-                try:
-                    plt.figure(figsize=(10, 4))
-                    plt.style.use('dark_background')
-                    dates_str = full_df['Data'].dt.strftime('%d/%m')
-                    plt.bar(dates_str, full_df['Horas/Dia'], color='#00ffea')
-                    plt.axhline(full_df['Horas/Dia'].mean(), color='magenta', linestyle='--', label='Média Diária')
-                    plt.xticks(rotation=45)
-                    plt.ylabel("Horas")
-                    plt.title("Horas por Dia")
-                    plt.legend()
-                    plt.tight_layout()
-                    st.pyplot(plt)
-                except Exception as e:
-                    st.error(f"Erro no gráfico: {str(e)}")
+            # Gráfico 2: Distribuição das Horas (Histograma Interativo)
+            st.write("📈 **Distribuição das Horas Diárias**")
+            st.write("*💡 Este histograma mostra com que frequência você trabalha determinadas quantidades de horas. Picos indicam suas jornadas mais comuns.*")
+            try:
+                fig2 = go.Figure()
+                
+                # Histograma
+                fig2.add_trace(go.Histogram(
+                    x=full_df['Horas/Dia'],
+                    nbinsx=15,
+                    name='Frequência',
+                    marker_color='lime',
+                    opacity=0.7,
+                    hovertemplate='Horas: %{x:.1f}-%{x:.1f}<br>Frequência: %{y}<extra></extra>'
+                ))
+                
+                # Linha da média
+                fig2.add_vline(
+                    x=media_diaria, 
+                    line_dash="dash", 
+                    line_color="cyan",
+                    annotation_text=f"Média: {media_diaria:.2f}h",
+                    annotation_position="top"
+                )
+                
+                # Linha da moda
+                fig2.add_vline(
+                    x=moda_diaria, 
+                    line_dash="dot", 
+                    line_color="yellow",
+                    annotation_text=f"Moda: {moda_diaria:.2f}h",
+                    annotation_position="bottom"
+                )
+                
+                # Área do desvio padrão
+                fig2.add_vrect(
+                    x0=media_diaria - desvio_diario,
+                    x1=media_diaria + desvio_diario,
+                    fillcolor="orange",
+                    opacity=0.2,
+                    annotation_text="±1 Desvio Padrão",
+                    annotation_position="top right"
+                )
+                
+                fig2.update_layout(
+                    title="Distribuição das Horas Trabalhadas",
+                    xaxis_title="Horas por Dia",
+                    yaxis_title="Frequência (Quantos Dias)",
+                    template="plotly_dark",
+                    height=500,
+                    showlegend=False
+                )
+                st.plotly_chart(fig2, use_container_width=True)
+            except Exception as e:
+                st.error(f"Erro no gráfico: {str(e)}")
 
-            with col2:
-                st.write("📈 **Distribuição das Horas**")
-                try:
-                    plt.figure(figsize=(10, 4))
-                    plt.style.use('dark_background')
-                    plt.hist(full_df['Horas/Dia'], bins=10, alpha=0.7, color='lime', edgecolor='white')
-                    plt.axvline(full_df['Horas/Dia'].mean(), color='cyan', linestyle='--', label='Média')
-                    plt.axvline(full_df['Horas/Dia'].std() + full_df['Horas/Dia'].mean(), color='orange', linestyle=':', label='1 Desvio Padrão')
-                    plt.xlabel("Horas por Dia")
-                    plt.ylabel("Frequência")
-                    plt.title("Distribuição das Horas")
-                    plt.legend()
-                    plt.tight_layout()
-                    st.pyplot(plt)
-                except Exception as e:
-                    st.error(f"Erro no gráfico: {str(e)}")
-
-            with col3:
-                st.write("📅 **Totais Semanais**")
-                try:
-                    plt.figure(figsize=(10, 4))
-                    plt.style.use('dark_background')
-                    week_labels = [str(w) for w in weekly_totals.index]
-                    plt.bar(week_labels, weekly_totals.values, color='#ffaa00')
-                    plt.axhline(weekly_totals.mean(), color='cyan', linestyle='--', label='Média Semanal')
-                    plt.xticks(rotation=45)
-                    plt.ylabel("Horas")
-                    plt.title("Horas por Semana")
-                    plt.legend()
-                    plt.tight_layout()
-                    st.pyplot(plt)
-                except Exception as e:
-                    st.error(f"Erro no gráfico semanal: {str(e)}")
+            # Gráfico 3: Totais Semanais (Gráfico de Barras Interativo)
+            st.write("📅 **Totais Semanais**")
+            st.write("*💡 Visualize suas horas semanais totais. Ajuda a identificar semanas mais intensas e padrões semanais de trabalho.*")
+            try:
+                week_labels = [str(w) for w in weekly_totals.index]
+                fig3 = go.Figure()
+                
+                # Barras semanais
+                fig3.add_trace(go.Bar(
+                    x=week_labels,
+                    y=weekly_totals.values,
+                    name='Horas Semanais',
+                    marker_color='#ffaa00',
+                    hovertemplate='<b>Semana %{x}</b><br>Total: %{y:.2f}h<extra></extra>'
+                ))
+                
+                # Linha da média semanal
+                fig3.add_trace(go.Scatter(
+                    x=week_labels,
+                    y=[media_semanal] * len(week_labels),
+                    mode='lines',
+                    name=f'Média Semanal ({media_semanal:.2f}h)',
+                    line=dict(color='cyan', dash='dash', width=2),
+                    hovertemplate='Média Semanal: %{y:.2f}h<extra></extra>'
+                ))
+                
+                fig3.update_layout(
+                    title="Horas Trabalhadas por Semana",
+                    xaxis_title="Semana",
+                    yaxis_title="Total de Horas",
+                    template="plotly_dark",
+                    height=500,
+                    showlegend=True
+                )
+                st.plotly_chart(fig3, use_container_width=True)
+            except Exception as e:
+                st.error(f"Erro no gráfico semanal: {str(e)}")
 
             st.subheader("📚 Estatísticas Explicadas")
 
@@ -445,15 +542,25 @@ def main():
             ### 📊 Estatísticas Diárias:
             - **Total Geral:** `{total_geral:.2f}` horas
             - **Média diária:** `{media_diaria:.2f}` horas  
-              A média é o valor médio de horas que você trabalhou por dia.
+              📈 A média é o valor médio de horas que você trabalhou por dia. É a soma de todas as horas dividida pelo número de dias.
+            - **Moda diária:** `{moda_diaria:.2f}` horas  
+              🎯 A moda é o valor de horas que você mais trabalhou (mais frequente). Indica sua jornada típica.
             - **Desvio padrão diário:** `{desvio_diario:.2f}` horas  
-              O desvio padrão mostra quanto os valores de horas variam em relação à média diária.
+              📊 O desvio padrão mostra a variabilidade das suas horas diárias. Quanto menor, mais consistente é sua rotina.
+              - Se ≤ 1h: Rotina muito consistente 🟢
+              - Se 1-2h: Rotina moderadamente variável 🟡  
+              - Se > 2h: Rotina muito variável 🔴
               
             ### 📅 Estatísticas Semanais:
             - **Média semanal:** `{media_semanal:.2f}` horas  
-              A média de horas trabalhadas por semana.
+              📈 A média de horas trabalhadas por semana completa.
             - **Desvio padrão semanal:** `{desvio_semanal:.2f}` horas  
-              Mostra a variação das horas semanais. Quanto maior, mais irregular é sua carga de trabalho semanal.
+              📊 Mostra a variação das horas semanais. Quanto maior, mais irregular é sua carga de trabalho semanal.
+              
+            ### 🔍 Como Interpretar os Gráficos:
+            - **Gráfico de Barras Diário:** Cada barra representa um dia. Barras altas = dias intensos.
+            - **Histograma:** Mostra quantos dias você trabalhou X horas. Picos = suas jornadas mais comuns.
+            - **Gráfico Semanal:** Compare semanas inteiras. Útil para identificar períodos mais intensos.
             """)
             
             st.subheader("📅 Totais por Semana")
