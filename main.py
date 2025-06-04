@@ -316,9 +316,15 @@ def main():
                 st.warning(f"Erro na conversão de datas: {str(e)}. Usando dados sem ordenação por data.")
                 # Se não conseguir converter, manter como está
 
-            # Calcular estatísticas
-            media = full_df['Horas/Dia'].mean()
-            desvio = full_df['Horas/Dia'].std()
+            # Calcular estatísticas DIÁRIAS
+            media_diaria = full_df['Horas/Dia'].mean()
+            desvio_diario = full_df['Horas/Dia'].std()
+            
+            # Calcular estatísticas SEMANAIS
+            full_df['Semana'] = full_df['Data'].dt.to_period('W')
+            weekly_totals = full_df.groupby('Semana')['Horas/Dia'].sum()
+            media_semanal = weekly_totals.mean()
+            desvio_semanal = weekly_totals.std()
             
             # Calcular total mensal
             full_df['Mes_Ano'] = full_df['Data'].dt.to_period('M')
@@ -343,10 +349,19 @@ def main():
                     # Aba Resumo
                     stats_df = pd.DataFrame([
                         ['Total Geral', f"{total_geral:.2f}"],
-                        ['Média Diária', f"{media:.2f}"],
-                        ['Desvio Padrão', f"{desvio:.2f}"]
+                        ['Média Diária', f"{media_diaria:.2f}"],
+                        ['Desvio Padrão Diário', f"{desvio_diario:.2f}"],
+                        ['Média Semanal', f"{media_semanal:.2f}"],
+                        ['Desvio Padrão Semanal', f"{desvio_semanal:.2f}"]
                     ], columns=['Estatística', 'Valor'])
                     stats_df.to_excel(writer, sheet_name='Resumo', index=False)
+                    
+                    # Aba Totais Semanais
+                    weekly_totals_df = weekly_totals.reset_index()
+                    weekly_totals_df['Semana'] = weekly_totals_df['Semana'].astype(str)
+                    weekly_totals_df.columns = ['Semana', 'Total Horas']
+                    weekly_totals_df['Total Horas'] = weekly_totals_df['Total Horas'].round(2)
+                    weekly_totals_df.to_excel(writer, sheet_name='Totais Semanais', index=False)
                     
                     # Aba Totais Mensais
                     monthly_totals_df = monthly_totals.copy()
@@ -371,7 +386,7 @@ def main():
                 )
 
             st.subheader("📊 Visualizações")
-            col1, col2 = st.columns(2)
+            col1, col2, col3 = st.columns(3)
 
             with col1:
                 st.write("📅 **Horas Trabalhadas por Dia**")
@@ -380,7 +395,7 @@ def main():
                     plt.style.use('dark_background')
                     dates_str = full_df['Data'].dt.strftime('%d/%m')
                     plt.bar(dates_str, full_df['Horas/Dia'], color='#00ffea')
-                    plt.axhline(full_df['Horas/Dia'].mean(), color='magenta', linestyle='--', label='Média')
+                    plt.axhline(full_df['Horas/Dia'].mean(), color='magenta', linestyle='--', label='Média Diária')
                     plt.xticks(rotation=45)
                     plt.ylabel("Horas")
                     plt.title("Horas por Dia")
@@ -407,17 +422,44 @@ def main():
                 except Exception as e:
                     st.error(f"Erro no gráfico: {str(e)}")
 
+            with col3:
+                st.write("📅 **Totais Semanais**")
+                try:
+                    plt.figure(figsize=(10, 4))
+                    plt.style.use('dark_background')
+                    week_labels = [str(w) for w in weekly_totals.index]
+                    plt.bar(week_labels, weekly_totals.values, color='#ffaa00')
+                    plt.axhline(weekly_totals.mean(), color='cyan', linestyle='--', label='Média Semanal')
+                    plt.xticks(rotation=45)
+                    plt.ylabel("Horas")
+                    plt.title("Horas por Semana")
+                    plt.legend()
+                    plt.tight_layout()
+                    st.pyplot(plt)
+                except Exception as e:
+                    st.error(f"Erro no gráfico semanal: {str(e)}")
+
             st.subheader("📚 Estatísticas Explicadas")
 
             st.markdown(f"""
+            ### 📊 Estatísticas Diárias:
             - **Total Geral:** `{total_geral:.2f}` horas
-            - **Média diária:** `{media:.2f}` horas  
+            - **Média diária:** `{media_diaria:.2f}` horas  
               A média é o valor médio de horas que você trabalhou por dia.
-            - **Desvio padrão:** `{desvio:.2f}` horas  
-              O desvio padrão mostra quanto os valores de horas variam em relação à média.
-              Quanto maior, mais instável está sua jornada diária.
+            - **Desvio padrão diário:** `{desvio_diario:.2f}` horas  
+              O desvio padrão mostra quanto os valores de horas variam em relação à média diária.
+              
+            ### 📅 Estatísticas Semanais:
+            - **Média semanal:** `{media_semanal:.2f}` horas  
+              A média de horas trabalhadas por semana.
+            - **Desvio padrão semanal:** `{desvio_semanal:.2f}` horas  
+              Mostra a variação das horas semanais. Quanto maior, mais irregular é sua carga de trabalho semanal.
             """)
             
+            st.subheader("📅 Totais por Semana")
+            for semana, total_semana in weekly_totals.items():
+                st.write(f"**Semana {semana}:** `{total_semana:.2f}` horas")
+                
             st.subheader("📅 Totais por Mês")
             for mes, total_mes in monthly_totals_display.items():
                 st.write(f"**{mes}:** `{total_mes:.2f}` horas")
