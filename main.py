@@ -7,6 +7,7 @@ import re
 import matplotlib.pyplot as plt
 import seaborn as sns
 from io import BytesIO
+import xlsxwriter
 
 OCR_SPACE_API_KEY = ''  # Se tiver, coloque aqui. Se não, deixe vazio.
 
@@ -179,26 +180,42 @@ def main():
                 excel_df['Data'] = excel_df['Data'].dt.strftime('%d/%m/%Y')
                 excel_df = excel_df.drop('Mes_Ano', axis=1, errors='ignore')
                 
-                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                    excel_df.to_excel(writer, sheet_name='Detalhes', index=False)
-                    
-                    # Aba com resumo geral
-                    stats_df = pd.DataFrame({
-                        'Total Geral': [f"{total_geral:.2f}"],
-                        'Média Diária': [f"{media:.2f}"],
-                        'Desvio Padrão': [f"{desvio:.2f}"]
-                    })
-                    stats_df.to_excel(writer, sheet_name='Resumo', index=False)
-                    
-                    # Aba com totais mensais
-                    monthly_excel = monthly_totals.copy()
-                    monthly_excel.columns = ['Mês/Ano', 'Total Horas']
-                    monthly_excel['Total Horas'] = monthly_excel['Total Horas'].round(2)
-                    monthly_excel.to_excel(writer, sheet_name='Totais Mensais', index=False)
-
+                # Usar xlsxwriter diretamente
+                workbook = xlsxwriter.Workbook(output, {'in_memory': True})
+                
+                # Aba Detalhes
+                worksheet1 = workbook.add_worksheet('Detalhes')
+                for col_num, column in enumerate(excel_df.columns):
+                    worksheet1.write(0, col_num, column)
+                for row_num, row_data in excel_df.iterrows():
+                    for col_num, value in enumerate(row_data):
+                        worksheet1.write(row_num + 1, col_num, value)
+                
+                # Aba Resumo
+                worksheet2 = workbook.add_worksheet('Resumo')
+                stats_data = [
+                    ['Total Geral', f"{total_geral:.2f}"],
+                    ['Média Diária', f"{media:.2f}"],
+                    ['Desvio Padrão', f"{desvio:.2f}"]
+                ]
+                for row_num, (key, value) in enumerate(stats_data):
+                    worksheet2.write(row_num, 0, key)
+                    worksheet2.write(row_num, 1, value)
+                
+                # Aba Totais Mensais
+                worksheet3 = workbook.add_worksheet('Totais Mensais')
+                worksheet3.write(0, 0, 'Mês/Ano')
+                worksheet3.write(0, 1, 'Total Horas')
+                for row_num, (mes, total_horas) in enumerate(monthly_totals.values):
+                    worksheet3.write(row_num + 1, 0, str(mes))
+                    worksheet3.write(row_num + 1, 1, round(total_horas, 2))
+                
+                workbook.close()
                 output.seek(0)
+                
             except Exception as e:
                 st.error(f"Erro ao gerar Excel: {str(e)}")
+                st.error(f"Detalhes do erro: {type(e).__name__}")
                 output = None
             
             # Download automático
