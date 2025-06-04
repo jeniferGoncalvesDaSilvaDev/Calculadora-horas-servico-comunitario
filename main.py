@@ -109,14 +109,15 @@ def calculate_hours(row):
         if pd.isna(entrada) or pd.isna(saida):
             return 0
 
-        # Horas trabalhadas = (Saída1 - Entrada1) + (Saída2 - Entrada2)
+        # Horas trabalhadas = (Horário de saída1 - Horário de entrada1) + (Horário de saída2 - Horário de entrada2) - (hora fim do intervalo - hora inicio do intervalo)
         # Saída1 = Início do Intervalo, Entrada1 = Entrada
         # Saída2 = Saída, Entrada2 = Fim do Intervalo
         
         if pd.notna(ini_intervalo) and pd.notna(fim_intervalo):
             periodo1 = (ini_intervalo - entrada).total_seconds() / 3600  # Manhã
             periodo2 = (saida - fim_intervalo).total_seconds() / 3600    # Tarde
-            horas_trabalhadas = periodo1 + periodo2
+            tempo_intervalo = (fim_intervalo - ini_intervalo).total_seconds() / 3600  # Intervalo
+            horas_trabalhadas = periodo1 + periodo2 - tempo_intervalo
         else:
             # Se não há intervalo, calcula normalmente
             horas_trabalhadas = (saida - entrada).total_seconds() / 3600
