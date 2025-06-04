@@ -22,3 +22,15 @@ externalPort = 80
 [[ports]]
 localPort = 8502
 externalPort = 3000
+
+[workflows]
+runButton = "Run Streamlit"
+
+[[workflows.workflow]]
+name = "Run Streamlit"
+author = 36521463
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "streamlit run --server.address 0.0.0.0 --server.headless true --server.enableCORS=false --server.enableWebsocketCompression=false main.py"

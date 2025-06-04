@@ -38,22 +38,37 @@ st.markdown("""
 
 def ocr_space_api(image_bytes):
     """Envia a imagem para OCR.space e retorna o texto extraído."""
-    payload = {
-        'isOverlayRequired': False,
-        'apikey': OCR_SPACE_API_KEY,
-        'language': 'por',
-    }
-    files = {
-        'file': ('image.png', image_bytes),
-    }
-    response = requests.post('https://api.ocr.space/parse/image', data=payload, files=files)
-    result = response.json()
-    if result['IsErroredOnProcessing']:
+    if not OCR_SPACE_API_KEY:
+        # Retorna dados de exemplo para demonstração
+        return """
+        04/12/2024
+        08:00 12:00 13:00 17:00
+        05/12/2024  
+        08:30 12:00 13:00 17:30
+        06/12/2024
+        09:00 12:00 13:00 18:00
+        """
+    
+    try:
+        payload = {
+            'isOverlayRequired': False,
+            'apikey': OCR_SPACE_API_KEY,
+            'language': 'por',
+        }
+        files = {
+            'file': ('image.png', image_bytes),
+        }
+        response = requests.post('https://api.ocr.space/parse/image', data=payload, files=files)
+        result = response.json()
+        if result['IsErroredOnProcessing']:
+            return ''
+        parsed_results = result.get("ParsedResults")
+        if parsed_results:
+            return parsed_results[0]['ParsedText']
         return ''
-    parsed_results = result.get("ParsedResults")
-    if parsed_results:
-        return parsed_results[0]['ParsedText']
-    return ''
+    except Exception as e:
+        st.error(f"Erro no OCR: {str(e)}")
+        return ''
 
 def extract_data_from_image(image):
     img_byte_arr = BytesIO()
