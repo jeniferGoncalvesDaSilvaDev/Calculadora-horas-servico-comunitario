@@ -171,58 +171,82 @@ def main():
             monthly_totals_display = full_df.groupby('Mes_Ano')['Horas/Dia'].sum()
             
             # Gerar Excel automaticamente
-            output = BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                full_df.to_excel(writer, sheet_name='Detalhes', index=False)
+            try:
+                output = BytesIO()
                 
-                # Aba com resumo geral
-                stats_df = pd.DataFrame({
-                    'Total Geral': [total_geral],
-                    'Média Diária': [media],
-                    'Desvio Padrão': [desvio]
-                })
-                stats_df.to_excel(writer, sheet_name='Resumo', index=False)
+                # Preparar DataFrame para Excel (remover coluna de período)
+                excel_df = full_df.copy()
+                excel_df['Data'] = excel_df['Data'].dt.strftime('%d/%m/%Y')
+                excel_df = excel_df.drop('Mes_Ano', axis=1, errors='ignore')
                 
-                # Aba com totais mensais
-                monthly_totals.columns = ['Mês/Ano', 'Total Horas']
-                monthly_totals.to_excel(writer, sheet_name='Totais Mensais', index=False)
+                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                    excel_df.to_excel(writer, sheet_name='Detalhes', index=False)
+                    
+                    # Aba com resumo geral
+                    stats_df = pd.DataFrame({
+                        'Total Geral': [f"{total_geral:.2f}"],
+                        'Média Diária': [f"{media:.2f}"],
+                        'Desvio Padrão': [f"{desvio:.2f}"]
+                    })
+                    stats_df.to_excel(writer, sheet_name='Resumo', index=False)
+                    
+                    # Aba com totais mensais
+                    monthly_excel = monthly_totals.copy()
+                    monthly_excel.columns = ['Mês/Ano', 'Total Horas']
+                    monthly_excel['Total Horas'] = monthly_excel['Total Horas'].round(2)
+                    monthly_excel.to_excel(writer, sheet_name='Totais Mensais', index=False)
 
-            output.seek(0)
+                output.seek(0)
+            except Exception as e:
+                st.error(f"Erro ao gerar Excel: {str(e)}")
+                output = None
             
             # Download automático
-            st.download_button(
-                label="📊 DOWNLOAD AUTOMÁTICO - Excel Consolidado",
-                data=output,
-                file_name="horas_psc_analise.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                type="primary"
-            )
+            if output:
+                st.download_button(
+                    label="📊 DOWNLOAD AUTOMÁTICO - Excel Consolidado",
+                    data=output,
+                    file_name="horas_psc_analise.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    type="primary"
+                )
 
             st.subheader("📊 Visualizações")
             col1, col2 = st.columns(2)
 
             with col1:
                 st.write("📅 **Horas Trabalhadas por Dia**")
-                plt.figure(figsize=(10, 4))
-                sns.set_theme(style="darkgrid")
-                sns.barplot(x=full_df['Data'].dt.strftime('%d/%m'), y=full_df['Horas/Dia'], color='#00ffea')
-                plt.axhline(full_df['Horas/Dia'].mean(), color='magenta', linestyle='--', label='Média')
-                plt.xticks(rotation=45)
-                plt.ylabel("Horas")
-                plt.title("Horas por Dia")
-                plt.legend()
-                st.pyplot(plt)
+                try:
+                    plt.figure(figsize=(10, 4))
+                    plt.style.use('dark_background')
+                    dates_str = full_df['Data'].dt.strftime('%d/%m')
+                    plt.bar(dates_str, full_df['Horas/Dia'], color='#00ffea')
+                    plt.axhline(full_df['Horas/Dia'].mean(), color='magenta', linestyle='--', label='Média')
+                    plt.xticks(rotation=45)
+                    plt.ylabel("Horas")
+                    plt.title("Horas por Dia")
+                    plt.legend()
+                    plt.tight_layout()
+                    st.pyplot(plt)
+                except Exception as e:
+                    st.error(f"Erro no gráfico: {str(e)}")
 
             with col2:
                 st.write("📈 **Distribuição das Horas**")
-                plt.figure(figsize=(10, 4))
-                sns.histplot(full_df['Horas/Dia'], bins=10, kde=True, color='lime')
-                plt.axvline(full_df['Horas/Dia'].mean(), color='cyan', linestyle='--', label='Média')
-                plt.axvline(full_df['Horas/Dia'].std() + full_df['Horas/Dia'].mean(), color='orange', linestyle=':', label='1 Desvio Padrão')
-                plt.xlabel("Horas por Dia")
-                plt.title("Distribuição das Horas")
-                plt.legend()
-                st.pyplot(plt)
+                try:
+                    plt.figure(figsize=(10, 4))
+                    plt.style.use('dark_background')
+                    plt.hist(full_df['Horas/Dia'], bins=10, alpha=0.7, color='lime', edgecolor='white')
+                    plt.axvline(full_df['Horas/Dia'].mean(), color='cyan', linestyle='--', label='Média')
+                    plt.axvline(full_df['Horas/Dia'].std() + full_df['Horas/Dia'].mean(), color='orange', linestyle=':', label='1 Desvio Padrão')
+                    plt.xlabel("Horas por Dia")
+                    plt.ylabel("Frequência")
+                    plt.title("Distribuição das Horas")
+                    plt.legend()
+                    plt.tight_layout()
+                    st.pyplot(plt)
+                except Exception as e:
+                    st.error(f"Erro no gráfico: {str(e)}")
 
             st.subheader("📚 Estatísticas Explicadas")
 
