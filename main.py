@@ -139,9 +139,49 @@ def main():
             st.dataframe(df)
 
         if all_data:
+            # Processar dados automaticamente
+            st.success("✅ Processamento concluído! Preparando download do Excel...")
             full_df = pd.concat(all_data)
             full_df['Data'] = pd.to_datetime(full_df['Data'], format='%d/%m/%Y')
             full_df.sort_values('Data', inplace=True)
+
+            # Calcular estatísticas
+            media = full_df['Horas/Dia'].mean()
+            desvio = full_df['Horas/Dia'].std()
+            
+            # Calcular total mensal
+            full_df['Mes_Ano'] = full_df['Data'].dt.to_period('M')
+            monthly_totals = full_df.groupby('Mes_Ano')['Horas/Dia'].sum().reset_index()
+            monthly_totals['Mes_Ano'] = monthly_totals['Mes_Ano'].astype(str)
+            monthly_totals_display = full_df.groupby('Mes_Ano')['Horas/Dia'].sum()
+            
+            # Gerar Excel automaticamente
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                full_df.to_excel(writer, sheet_name='Detalhes', index=False)
+                
+                # Aba com resumo geral
+                stats_df = pd.DataFrame({
+                    'Total Geral': [total_geral],
+                    'Média Diária': [media],
+                    'Desvio Padrão': [desvio]
+                })
+                stats_df.to_excel(writer, sheet_name='Resumo', index=False)
+                
+                # Aba com totais mensais
+                monthly_totals.columns = ['Mês/Ano', 'Total Horas']
+                monthly_totals.to_excel(writer, sheet_name='Totais Mensais', index=False)
+
+            output.seek(0)
+            
+            # Download automático
+            st.download_button(
+                label="📊 DOWNLOAD AUTOMÁTICO - Excel Consolidado",
+                data=output,
+                file_name="horas_psc_analise.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                type="primary"
+            )
 
             st.subheader("📊 Visualizações")
             col1, col2 = st.columns(2)
@@ -170,12 +210,6 @@ def main():
                 st.pyplot(plt)
 
             st.subheader("📚 Estatísticas Explicadas")
-            media = full_df['Horas/Dia'].mean()
-            desvio = full_df['Horas/Dia'].std()
-            
-            # Calcular totais mensais para exibição
-            full_df['Mes_Ano'] = full_df['Data'].dt.to_period('M')
-            monthly_totals_display = full_df.groupby('Mes_Ano')['Horas/Dia'].sum()
 
             st.markdown(f"""
             - **Total Geral:** `{total_geral:.2f}` horas
@@ -189,35 +223,6 @@ def main():
             st.subheader("📅 Totais por Mês")
             for mes, total_mes in monthly_totals_display.items():
                 st.write(f"**{mes}:** `{total_mes:.2f}` horas")
-
-            # Calcular total mensal
-            full_df['Mes_Ano'] = full_df['Data'].dt.to_period('M')
-            monthly_totals = full_df.groupby('Mes_Ano')['Horas/Dia'].sum().reset_index()
-            monthly_totals['Mes_Ano'] = monthly_totals['Mes_Ano'].astype(str)
-            
-            output = BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                full_df.to_excel(writer, sheet_name='Detalhes', index=False)
-                
-                # Aba com resumo geral
-                stats_df = pd.DataFrame({
-                    'Total Geral': [total_geral],
-                    'Média Diária': [media],
-                    'Desvio Padrão': [desvio]
-                })
-                stats_df.to_excel(writer, sheet_name='Resumo', index=False)
-                
-                # Aba com totais mensais
-                monthly_totals.columns = ['Mês/Ano', 'Total Horas']
-                monthly_totals.to_excel(writer, sheet_name='Totais Mensais', index=False)
-
-            output.seek(0)
-            st.download_button(
-                label="⬇️ Baixar Excel Consolidado",
-                data=output,
-                file_name="horas_psc_analise.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
 
 if __name__ == "__main__":
     main()
