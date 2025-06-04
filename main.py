@@ -1,15 +1,14 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import pytesseract
+import requests
 from PIL import Image
 import re
 import matplotlib.pyplot as plt
 import seaborn as sns
 from io import BytesIO
 
-# Caminho do Tesseract para Windows (ajuste se estiver usando outro SO)
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+OCR_SPACE_API_KEY = ''  # Se tiver, coloque aqui. Se não, deixe vazio.
 
 # Layout e título cyberpunk
 st.set_page_config(layout="wide", page_title="💀 Cyberpunk PSC Horas", page_icon="🕶️")
@@ -37,8 +36,30 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+def ocr_space_api(image_bytes):
+    """Envia a imagem para OCR.space e retorna o texto extraído."""
+    payload = {
+        'isOverlayRequired': False,
+        'apikey': OCR_SPACE_API_KEY,
+        'language': 'por',
+    }
+    files = {
+        'file': ('image.png', image_bytes),
+    }
+    response = requests.post('https://api.ocr.space/parse/image', data=payload, files=files)
+    result = response.json()
+    if result['IsErroredOnProcessing']:
+        return ''
+    parsed_results = result.get("ParsedResults")
+    if parsed_results:
+        return parsed_results[0]['ParsedText']
+    return ''
+
 def extract_data_from_image(image):
-    text = pytesseract.image_to_string(image, lang='por')
+    img_byte_arr = BytesIO()
+    image.save(img_byte_arr, format='PNG')
+    img_bytes = img_byte_arr.getvalue()
+    text = ocr_space_api(img_bytes)
     return text
 
 def parse_time_data(text):
