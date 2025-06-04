@@ -128,13 +128,31 @@ def main():
     st.title("Controle de Horas")
     st.subheader("Análise OCR e Visualização de Jornadas")
 
-    uploaded_files = st.file_uploader("📸 Envie imagens do formulário PSC", type=['jpg', 'jpeg', 'png'], accept_multiple_files=True)
+    st.markdown("### 📁 Upload de Arquivos")
+    st.info("💡 Dica: Você pode selecionar múltiplos arquivos de uma vez!")
+    uploaded_files = st.file_uploader(
+        "📸 Selecione uma ou mais imagens do formulário PSC", 
+        type=['jpg', 'jpeg', 'png'], 
+        accept_multiple_files=True,
+        help="Formatos aceitos: JPG, JPEG, PNG. Você pode selecionar múltiplos arquivos."
+    )
+    
+    if uploaded_files:
+        st.success(f"✅ {len(uploaded_files)} arquivo(s) carregado(s) com sucesso!")
 
     if uploaded_files:
         all_data = []
         total_geral = 0
-
-        for uploaded_file in uploaded_files:
+        
+        # Barra de progresso para múltiplos arquivos
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        for i, uploaded_file in enumerate(uploaded_files):
+            # Atualizar progresso
+            progress = (i + 1) / len(uploaded_files)
+            progress_bar.progress(progress)
+            status_text.text(f"Processando arquivo {i+1} de {len(uploaded_files)}: {uploaded_file.name}")
             image = Image.open(uploaded_file)
             st.image(image, caption=uploaded_file.name, width=300)
             text = extract_data_from_image(image)
@@ -153,6 +171,10 @@ def main():
 
             st.write(f"**{uploaded_file.name}** - Total: `{total:.2f}` horas 🕒")
             st.dataframe(df)
+        
+        # Finalizar barra de progresso
+        progress_bar.progress(1.0)
+        status_text.text(f"✅ Processamento completo! {len(uploaded_files)} arquivo(s) processado(s).")
 
         if all_data:
             # Processar dados automaticamente
@@ -175,47 +197,34 @@ def main():
             try:
                 output = BytesIO()
                 
-                # Preparar DataFrame para Excel (remover coluna de período)
+                # Preparar DataFrame para Excel
                 excel_df = full_df.copy()
                 excel_df['Data'] = excel_df['Data'].dt.strftime('%d/%m/%Y')
                 excel_df = excel_df.drop('Mes_Ano', axis=1, errors='ignore')
                 
-                # Usar xlsxwriter diretamente
-                workbook = xlsxwriter.Workbook(output, {'in_memory': True})
+                # Usar pandas para criar Excel
+                with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                    # Aba Detalhes
+                    excel_df.to_excel(writer, sheet_name='Detalhes', index=False)
+                    
+                    # Aba Resumo
+                    stats_df = pd.DataFrame([
+                        ['Total Geral', f"{total_geral:.2f}"],
+                        ['Média Diária', f"{media:.2f}"],
+                        ['Desvio Padrão', f"{desvio:.2f}"]
+                    ], columns=['Estatística', 'Valor'])
+                    stats_df.to_excel(writer, sheet_name='Resumo', index=False)
+                    
+                    # Aba Totais Mensais
+                    monthly_totals_df = monthly_totals.copy()
+                    monthly_totals_df.columns = ['Mês/Ano', 'Total Horas']
+                    monthly_totals_df['Total Horas'] = monthly_totals_df['Total Horas'].round(2)
+                    monthly_totals_df.to_excel(writer, sheet_name='Totais Mensais', index=False)
                 
-                # Aba Detalhes
-                worksheet1 = workbook.add_worksheet('Detalhes')
-                for col_num, column in enumerate(excel_df.columns):
-                    worksheet1.write(0, col_num, column)
-                for row_num, row_data in excel_df.iterrows():
-                    for col_num, value in enumerate(row_data):
-                        worksheet1.write(row_num + 1, col_num, value)
-                
-                # Aba Resumo
-                worksheet2 = workbook.add_worksheet('Resumo')
-                stats_data = [
-                    ['Total Geral', f"{total_geral:.2f}"],
-                    ['Média Diária', f"{media:.2f}"],
-                    ['Desvio Padrão', f"{desvio:.2f}"]
-                ]
-                for row_num, (key, value) in enumerate(stats_data):
-                    worksheet2.write(row_num, 0, key)
-                    worksheet2.write(row_num, 1, value)
-                
-                # Aba Totais Mensais
-                worksheet3 = workbook.add_worksheet('Totais Mensais')
-                worksheet3.write(0, 0, 'Mês/Ano')
-                worksheet3.write(0, 1, 'Total Horas')
-                for row_num, (mes, total_horas) in enumerate(monthly_totals.values):
-                    worksheet3.write(row_num + 1, 0, str(mes))
-                    worksheet3.write(row_num + 1, 1, round(total_horas, 2))
-                
-                workbook.close()
                 output.seek(0)
                 
             except Exception as e:
                 st.error(f"Erro ao gerar Excel: {str(e)}")
-                st.error(f"Detalhes do erro: {type(e).__name__}")
                 output = None
             
             # Download automático
