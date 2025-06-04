@@ -172,6 +172,10 @@ def main():
             st.subheader("📚 Estatísticas Explicadas")
             media = full_df['Horas/Dia'].mean()
             desvio = full_df['Horas/Dia'].std()
+            
+            # Calcular totais mensais para exibição
+            full_df['Mes_Ano'] = full_df['Data'].dt.to_period('M')
+            monthly_totals_display = full_df.groupby('Mes_Ano')['Horas/Dia'].sum()
 
             st.markdown(f"""
             - **Total Geral:** `{total_geral:.2f}` horas
@@ -181,16 +185,31 @@ def main():
               O desvio padrão mostra quanto os valores de horas variam em relação à média.
               Quanto maior, mais instável está sua jornada diária.
             """)
+            
+            st.subheader("📅 Totais por Mês")
+            for mes, total_mes in monthly_totals_display.items():
+                st.write(f"**{mes}:** `{total_mes:.2f}` horas")
 
+            # Calcular total mensal
+            full_df['Mes_Ano'] = full_df['Data'].dt.to_period('M')
+            monthly_totals = full_df.groupby('Mes_Ano')['Horas/Dia'].sum().reset_index()
+            monthly_totals['Mes_Ano'] = monthly_totals['Mes_Ano'].astype(str)
+            
             output = BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 full_df.to_excel(writer, sheet_name='Detalhes', index=False)
+                
+                # Aba com resumo geral
                 stats_df = pd.DataFrame({
                     'Total Geral': [total_geral],
-                    'Média': [media],
+                    'Média Diária': [media],
                     'Desvio Padrão': [desvio]
                 })
                 stats_df.to_excel(writer, sheet_name='Resumo', index=False)
+                
+                # Aba com totais mensais
+                monthly_totals.columns = ['Mês/Ano', 'Total Horas']
+                monthly_totals.to_excel(writer, sheet_name='Totais Mensais', index=False)
 
             output.seek(0)
             st.download_button(
