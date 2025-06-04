@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from io import BytesIO
 import xlsxwriter
+import openpyxl
 
 OCR_SPACE_API_KEY = ''  # Se tiver, coloque aqui. Se não, deixe vazio.
 
@@ -124,18 +125,100 @@ def calculate_hours(row):
     except:
         return 0
 
+def process_excel_file(excel_file):
+    """Processa um arquivo Excel e extrai os dados de horário"""
+    try:
+        # Tenta ler o arquivo Excel
+        df = pd.read_excel(excel_file)
+        
+        # Busca por colunas que possam conter os dados necessários
+        data_processed = []
+        
+        # Mapear possíveis nomes de colunas
+        col_mapping = {
+            'data': ['data', 'date', 'dia'],
+            'entrada': ['entrada', 'entry', 'inicio', 'start'],
+            'saida': ['saida', 'exit', 'fim', 'end'],
+            'inicio_intervalo': ['inicio_intervalo', 'inicio intervalo', 'break_start', 'intervalo_inicio'],
+            'fim_intervalo': ['fim_intervalo', 'fim intervalo', 'break_end', 'intervalo_fim']
+        }
+        
+        # Encontrar as colunas corretas
+        found_cols = {}
+        for key, possible_names in col_mapping.items():
+            for col in df.columns:
+                if any(name.lower() in col.lower() for name in possible_names):
+                    found_cols[key] = col
+                    break
+        
+        # Se não encontrar as colunas esperadas, assumir ordem padrão
+        if len(found_cols) < 3:  # Pelo menos Data, Entrada e Saída
+            cols = df.columns.tolist()
+            if len(cols) >= 3:
+                found_cols = {
+                    'data': cols[0],
+                    'entrada': cols[1],
+                    'saida': cols[-1]  # Última coluna como saída
+                }
+                if len(cols) >= 5:
+                    found_cols['inicio_intervalo'] = cols[2]
+                    found_cols['fim_intervalo'] = cols[3]
+        
+        # Processar os dados
+        for _, row in df.iterrows():
+            try:
+                data_entry = {
+                    'Data': str(row[found_cols['data']]) if 'data' in found_cols else '',
+                    'Entrada': str(row[found_cols['entrada']]) if 'entrada' in found_cols else '',
+                    'Saída': str(row[found_cols['saida']]) if 'saida' in found_cols else '',
+                    'Início Intervalo': str(row[found_cols.get('inicio_intervalo', '')]) if 'inicio_intervalo' in found_cols else '',
+                    'Fim Intervalo': str(row[found_cols.get('fim_intervalo', '')]) if 'fim_intervalo' in found_cols else ''
+                }
+                
+                # Validar se a linha tem dados válidos
+                if data_entry['Data'] and data_entry['Entrada'] and data_entry['Saída']:
+                    data_processed.append(data_entry)
+                    
+            except Exception as e:
+                continue
+                
+        return data_processed
+        
+    except Exception as e:
+        st.error(f"Erro ao processar arquivo Excel: {str(e)}")
+        return []
+
 def main():
     st.title("Controle de Horas")
     st.subheader("Análise OCR e Visualização de Jornadas")
 
     st.markdown("### 📁 Upload de Arquivos")
-    st.info("💡 Dica: Você pode selecionar múltiplos arquivos de uma vez!")
-    uploaded_files = st.file_uploader(
-        "📸 Selecione uma ou mais imagens do formulário PSC", 
-        type=['jpg', 'jpeg', 'png'], 
-        accept_multiple_files=True,
-        help="Formatos aceitos: JPG, JPEG, PNG. Você pode selecionar múltiplos arquivos."
+    
+    # Opção para escolher tipo de arquivo
+    file_type = st.radio(
+        "🔧 Escolha o tipo de arquivo:",
+        ("📸 Imagens (OCR)", "📊 Excel"),
+        help="Selecione o tipo de arquivo que você deseja enviar"
     )
+    
+    if file_type == "📸 Imagens (OCR)":
+        st.info("💡 Dica: Você pode selecionar múltiplas imagens de uma vez!")
+        uploaded_files = st.file_uploader(
+            "📸 Selecione uma ou mais imagens do formulário PSC", 
+            type=['jpg', 'jpeg', 'png'], 
+            accept_multiple_files=True,
+            help="Formatos aceitos: JPG, JPEG, PNG. Você pode selecionar múltiplos arquivos."
+        )
+        file_processing_type = "image"
+    else:
+        st.info("💡 Dica: Você pode selecionar múltiplos arquivos Excel de uma vez!")
+        uploaded_files = st.file_uploader(
+            "📊 Selecione um ou mais arquivos Excel com dados de horário", 
+            type=['xlsx', 'xls'], 
+            accept_multiple_files=True,
+            help="Formatos aceitos: XLSX, XLS. Os dados devem ter colunas para Data, Entrada, Saída e opcionalmente intervalos."
+        )
+        file_processing_type = "excel"
     
     if uploaded_files:
         st.success(f"✅ {len(uploaded_files)} arquivo(s) carregado(s) com sucesso!")
@@ -153,10 +236,17 @@ def main():
             progress = (i + 1) / len(uploaded_files)
             progress_bar.progress(progress)
             status_text.text(f"Processando arquivo {i+1} de {len(uploaded_files)}: {uploaded_file.name}")
-            image = Image.open(uploaded_file)
-            st.image(image, caption=uploaded_file.name, width=300)
-            text = extract_data_from_image(image)
-            raw_data = parse_time_data(text)
+            
+            if file_processing_type == "image":
+                # Processamento de imagem (OCR)
+                image = Image.open(uploaded_file)
+                st.image(image, caption=uploaded_file.name, width=300)
+                text = extract_data_from_image(image)
+                raw_data = parse_time_data(text)
+            else:
+                # Processamento de Excel
+                raw_data = process_excel_file(uploaded_file)
+                st.write(f"📊 **{uploaded_file.name}** processado")
 
             if not raw_data:
                 st.warning(f"Nenhum dado detectado em {uploaded_file.name}")
